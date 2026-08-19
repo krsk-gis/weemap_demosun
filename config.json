@@ -1,0 +1,17 @@
+{
+  "project": {
+    "title": "weemap demosun",
+    "subtitle": "by Mapversum",
+    "pageTitle": "weemap demosun - Hőtérkép",
+    "introText": "Ez egy közösségi térképező alkalmazás, amely azt méri fel, hogy Szegeden hol vannak a legforróbb és a leghűvösebb pontok — segíts megtalálni őket!",
+    "cityPlaceholder": "Szeged"
+  },
+  "map": {
+    "center": [46.2530, 20.1414],
+    "zoom": 14
+  },
+  "supabase": {
+    "url": "https://ujcjjxiynmvznategkqa.supabase.co",
+    "anonKey": "sb_publishable_jypOo0iOpr29521pm5Uezg_slw-70dD"
+  }
+}

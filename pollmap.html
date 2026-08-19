@@ -1,0 +1,443 @@
+<!DOCTYPE html>
+<html lang="hu">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>weemap demosun - Hőtérkép</title>
+    <link rel="icon" type="image/svg+xml" href="favicon.svg">
+    <link rel="icon" type="image/png" sizes="32x32" href="favicon-32.png">
+    <link rel="icon" type="image/png" sizes="192x192" href="favicon-192.png">
+    <link rel="apple-touch-icon" href="apple-touch-icon.png">
+
+    <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        body { margin: 0; padding: 0; font-family: 'Manrope', Roboto, Helvetica, Arial, sans-serif; }
+        #map { height: 100vh; width: 100%; cursor: default; }
+
+        /* --- BEVEZETŐ ABLAK --- */
+        #intro-modal {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background-color: rgba(0, 0, 0, 0.85);
+            backdrop-filter: blur(5px); z-index: 9999;
+            display: flex; justify-content: center; align-items: center;
+        }
+        .modal-content {
+            background: rgb(37, 37, 37); padding: 40px; border-radius: 15px;
+            text-align: center; max-width: 800px; box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+            color: white; border: 1px solid #555;
+        }
+        .modal-content h1 {
+            margin-top: 0; font-size: 36px; font-weight: 700;
+            display: flex; align-items: center; justify-content: center; gap: 15px; flex-wrap: wrap;
+        }
+        .modal-content p { font-size: 18px; line-height: 1.5; color: #ccc; margin-bottom: 30px; text-align: left; font-weight: 500; }
+        .intro-logo { height: 56px; width: auto; display: block; }
+        .brand-highlight { display: flex; align-items: center; }
+        .start-btn { width: 40%; padding: 10px; border: 1px solid #ddd; background: #424242; cursor: pointer; border-radius: 5px; font-size: 16px; transition: all 0.2s; color:#ffffff; font-weight: bold; }
+        .start-btn:hover { background: #007bff; border-color: #007bff; }
+
+        /* --- BAL OLDALI VEZÉRLŐPANEL --- */
+        #custom-panel {
+            position: absolute; top: 10px; left: 50px; z-index: 1000;
+            background: rgb(37, 37, 37); padding: 15px; border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.15); width: 250px; user-select: none;
+        }
+        #custom-panel h3 { margin: 0 0 10px 0; font-size: 18px; font-weight: 600; color: #ffffff; text-align: center;}
+        .tool-row { display: flex; flex-direction: column; }
+        .tool-btn {
+            display: flex; align-items: center; width: 100%; padding: 10px;
+            margin-bottom: 5px; border: 1px solid #ddd; background: #424242;
+            cursor: pointer; border-radius: 5px; font-size: 16px; transition: all 0.2s;
+            text-align: left; color:#ffffff; font-family: 'Manrope'; font-weight: 700;
+        }
+        .tool-btn:hover { background: #1a1a1a; }
+        .tool-btn.active { background: #8ebdff; border-color: #007bff; color: #007bff; font-weight: bold; }
+        .tool-btn i { margin-right: 10px; width: 20px; text-align: center; }
+
+        .tool-hint { font-size: 12.5px; color: #aaaaaa; line-height: 1.4; margin: 6px 2px 12px; font-weight: 500; }
+
+        .point-card {
+            border: 1px solid #555; border-radius: 6px; padding: 10px;
+            margin-bottom: 10px; background: #2c2c2c;
+        }
+        .point-card label {
+            display: block; margin-bottom: 6px; color: #cccccc; font-size: 13px; font-weight: 600;
+        }
+
+        .brush-comment {
+            width: 100%; height: 50px; margin-top: 4px; padding: 8px; box-sizing: border-box;
+            border: 1px solid #555; border-radius: 4px; background-color: #505050; color: white;
+            font-family: 'Manrope', sans-serif; font-size: 13px; resize: none; display: block;
+        }
+
+        .remove-point-btn {
+            margin-top: 8px; width: 100%; padding: 6px; border: 1px solid #dc3545;
+            background: transparent; color: #f89f9f; border-radius: 4px; cursor: pointer;
+            font-family: 'Manrope'; font-size: 12px; font-weight: 700; transition: all 0.2s;
+        }
+        .remove-point-btn:hover { background: #dc3545; color: white; }
+
+        .submit-btn { background-color: #28a745; color: white; border: none; padding: 12px; width: 100%; border-radius: 5px; font-weight: 700; cursor: pointer; margin-top: 5px; font-family: 'Manrope'; font-size:16px; }
+        .submit-btn:hover { background: #166628; transition: all 0.2s}
+        .submit-btn:disabled { background-color: #94d3a2; cursor: not-allowed; }
+        #status { margin-top: 10px; font-size: 14px; text-align: center; min-height: 18px; font-weight: bold; color:#ffffff}
+
+        /* --- JOBB FELSŐ LOGÓ DOBOZ --- */
+        #brand-box {
+            position: absolute; top: 10px; right: 10px; z-index: 1000;
+            background: rgb(37, 37, 37); padding: 14px 20px 10px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.15);
+            display: flex; flex-direction: column; align-items: flex-end;
+        }
+        #brand-logo-img { height: 50px; width: auto; display: block; }
+        #brand-subtitle { margin-top: 4px; font-size: 15px; color: #b6b6b6; letter-spacing: 0.5px; font-family: 'Manrope', sans-serif; font-weight: 600; }
+
+        /* --- KURZOROK ÉS EGYÉB --- */
+        .paint-cursor { cursor: crosshair !important; }
+
+        /* Pont-jelölők a térképen (forró / hűvös) */
+        .point-marker {
+            width: 36px; height: 36px; border-radius: 50%;
+            display: flex; align-items: center; justify-content: center;
+            color: #fff; font-size: 16px; border: 3px solid #fff;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.45); cursor: grab;
+        }
+        .point-marker:active { cursor: grabbing; }
+
+        /* MapLibre kontrollok sötét témához igazítva */
+        .maplibregl-ctrl-group { background: #424242 !important; border: 1px solid #e0e0e0; }
+        .maplibregl-ctrl-group button { background-color: #424242 !important; }
+        .maplibregl-ctrl-group button:hover { background-color: #1a1a1a !important; }
+        .maplibregl-ctrl-icon { filter: invert(1); }
+
+        /* --- BAL ALSÓ LOGÓ --- */
+        #bottom-logo {
+            position: absolute;
+            bottom: 20px;
+            left: 20px;
+            z-index: 1000;
+            pointer-events: none;
+        }
+
+        #bottom-logo img {
+            height: 100px;
+            width: auto;
+            transition: opacity 0.3s;
+            pointer-events: auto;
+        }
+
+        #bottom-logo img:hover {
+            opacity: 1;
+        }
+
+        /* --- MOBIL ELRENDEZÉS --- */
+        @media (max-width: 680px) {
+            .modal-content { padding: 24px 18px; max-width: 92vw; }
+            .modal-content h1 { font-size: 26px; }
+            .intro-logo { height: 38px; }
+            .start-btn { width: 85%; }
+
+            #bottom-logo { display: none; }
+
+            #brand-box { top: 8px; right: 8px; padding: 8px 12px 6px; }
+            #brand-logo-img { height: 32px; }
+            #brand-subtitle { display: none; }
+
+            #custom-panel {
+                top: auto; bottom: 0; left: 0; right: 0; width: 100%;
+                max-height: 60vh; overflow-y: auto;
+                border-radius: 14px 14px 0 0;
+                padding: 10px 12px calc(10px + env(safe-area-inset-bottom));
+                box-sizing: border-box;
+            }
+            #custom-panel h3 { display: none; }
+            .tool-row {
+                flex-direction: row; overflow-x: auto; -webkit-overflow-scrolling: touch;
+                gap: 6px; padding-bottom: 4px;
+            }
+            .tool-row .tool-btn {
+                flex: 0 0 auto; width: auto; white-space: nowrap;
+                margin-bottom: 0; padding: 9px 12px; font-size: 13px;
+            }
+            .submit-btn { margin-top: 8px; }
+        }
+
+    </style>
+</head>
+<body>
+    <div id="bottom-logo">
+        <img src="geons.png">
+    </div>
+    <div id="intro-modal">
+        <div class="modal-content">
+            <h1>
+                Üdvözöl a
+                <span class="brand-highlight">
+                    <img src="weemap-brand.svg" class="intro-logo" alt="weemap">
+                </span>
+                !
+            </h1>
+            <p id="intro-text">Ez egy közösségi térképező alkalmazás, amely azt méri fel, hogy Szegeden hol vannak a legforróbb és a leghűvösebb pontok — segíts megtalálni őket!</p>
+            <p style="font-size: 16px; color: #aaa;">
+                1. Válaszd ki az eszköztárban, hogy forró vagy hűvös pontot szeretnél jelölni.<br>
+                2. Kattints a térképen arra a helyre, amit a legforróbbnak / leghűvösebbnek érzel.<br>
+                3. Ha szeretnéd, írj pár szót arról, miért pont ott jelölted a pontot.<br>
+                4. Ha végeztél, küldd be a pontjaidat.<br>
+                5. Beküldés után egy rövid kérdőív nyílik meg — azt is töltsd ki!<br>
+            </p>
+            <p style="font-size: 13px; color: #888;">Egy forró és egy hűvös pontot jelölhetsz ki. Újbóli kattintással áthelyezheted, vagy egyszerűen húzd a jelölőt.</p>
+            <button class="start-btn" onclick="closeModal()">Vágjunk bele!</button>
+        </div>
+    </div>
+
+    <div id="brand-box">
+        <img src="weemap-brand.svg" alt="weemap" id="brand-logo-img">
+        <span id="brand-subtitle">by Mapversum</span>
+    </div>
+
+    <div id="custom-panel">
+        <h3>🌡️ Hőérzet térképezése</h3>
+
+        <div class="tool-row">
+            <button class="tool-btn" id="btn-hot" onclick="selectPointType('hot')">
+                <i class="fas fa-sun" style="color:#ff7a1a"></i> Forró pont
+            </button>
+            <button class="tool-btn" id="btn-cool" onclick="selectPointType('cool')">
+                <i class="fas fa-snowflake" style="color:#29b6f6"></i> Hűvös pont
+            </button>
+        </div>
+
+        <p class="tool-hint">Válaszd ki az egyik gombot, majd kattints a térképen a helyére. A jelölő utólag húzással is finomítható.</p>
+
+        <div class="point-card" id="hot-comment-wrap" style="display:none">
+            <label><i class="fas fa-sun" style="color:#ff7a1a"></i> Forró pont — miért itt?</label>
+            <textarea id="hot-comment" class="brush-comment" placeholder="Pl. sok az aszfalt, nincs árnyék… (opcionális)"></textarea>
+            <button type="button" class="remove-point-btn" onclick="removePoint('hot')">✕ Pont törlése</button>
+        </div>
+
+        <div class="point-card" id="cool-comment-wrap" style="display:none">
+            <label><i class="fas fa-snowflake" style="color:#29b6f6"></i> Hűvös pont — miért itt?</label>
+            <textarea id="cool-comment" class="brush-comment" placeholder="Pl. sok a fa, árnyékos… (opcionális)"></textarea>
+            <button type="button" class="remove-point-btn" onclick="removePoint('cool')">✕ Pont törlése</button>
+        </div>
+
+        <button class="submit-btn" onclick="submitPoints()">✅ Pontok beküldése</button>
+        <div id="status">Betöltés…</div>
+    </div>
+
+    <div id="map"></div>
+
+    <script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
+    <script src="https://unpkg.com/pmtiles@3.0.7/dist/pmtiles.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script>
+        function closeModal() {
+            document.getElementById('intro-modal').style.display = 'none';
+        }
+
+        function generateUUID() {
+            return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+                var r = Math.random() * 16 | 0, v = c == 'x' ? r : (r & 0x3 | 0x8);
+                return v.toString(16);
+            });
+        }
+        const USER_ID = generateUUID();
+        console.log("Session ID:", USER_ID);
+
+        // Projekt-konfiguráció JSON-ból (config.json) — nincs bedrótozott város/URL.
+        // Ha a fájl nem tölthető be (pl. file:// megnyitás build/hosting nélkül),
+        // ez az alapértelmezés lép életbe, hogy a felület akkor is működjön.
+        var DEFAULT_CONFIG = {
+            project: {
+                title: 'weemap demosun',
+                subtitle: 'by Mapversum',
+                pageTitle: 'weemap demosun - Hőtérkép',
+                introText: 'Ez egy közösségi térképező alkalmazás, amely azt méri fel, hogy Szegeden hol vannak a legforróbb és a leghűvösebb pontok — segíts megtalálni őket!',
+                cityPlaceholder: 'Szeged'
+            },
+            map: { center: [46.2530, 20.1414], zoom: 14 },
+            supabase: { url: 'https://ujcjjxiynmvznategkqa.supabase.co', anonKey: 'sb_publishable_jypOo0iOpr29521pm5Uezg_slw-70dD' }
+        };
+
+        // pmtiles protokoll regisztrálása — egyelőre raszteres OSM alaptérképet
+        // használunk (buildStyle), de innen egy valódi Szeged-kivágat .pmtiles
+        // fájlra állás már csak stílus-forráscsere, nem kódváltoztatás.
+        var pmtilesProtocol = new pmtiles.Protocol();
+        maplibregl.addProtocol('pmtiles', pmtilesProtocol.tile);
+
+        function buildStyle() {
+            return {
+                version: 8,
+                sources: {
+                    osm: {
+                        type: 'raster',
+                        tiles: [
+                            'https://a.tile.openstreetmap.org/{z}/{x}/{y}.png',
+                            'https://b.tile.openstreetmap.org/{z}/{x}/{y}.png',
+                            'https://c.tile.openstreetmap.org/{z}/{x}/{y}.png'
+                        ],
+                        tileSize: 256,
+                        attribution: '© OpenStreetMap'
+                    }
+                },
+                layers: [{ id: 'osm', type: 'raster', source: 'osm' }]
+            };
+        }
+
+        // --- Két jelölhető pont: egy "forró" és egy "hűvös". Mindegyik egy
+        // húzható MapLibre Marker, saját opcionális szöveges indoklással.
+        // A korábbi beküldők eredményei szándékosan nincsenek betöltve/kirajzolva.
+        var POINT_TYPES = ['hot', 'cool'];
+        var POINT_META = {
+            hot:  { attitude: 'Forró pont', color: '#ff7a1a', icon: 'fa-sun',       commentId: 'hot-comment',  wrapId: 'hot-comment-wrap',  btnId: 'btn-hot' },
+            cool: { attitude: 'Hűvös pont', color: '#29b6f6', icon: 'fa-snowflake', commentId: 'cool-comment', wrapId: 'cool-comment-wrap', btnId: 'btn-cool' }
+        };
+
+        var map, supabaseClient;
+        var points = { hot: null, cool: null }; // type -> { marker, comment } | null
+        var selectedType = null; // épp elhelyezésre váró pont típusa ('hot' | 'cool' | null)
+
+        function emptyFC() {
+            return { type: 'FeatureCollection', features: [] };
+        }
+
+        function createMarkerElement(type) {
+            var meta = POINT_META[type];
+            var el = document.createElement('div');
+            el.className = 'point-marker';
+            el.style.background = meta.color;
+            el.innerHTML = '<i class="fas ' + meta.icon + '"></i>';
+            return el;
+        }
+
+        function placeOrMovePoint(type, lngLat) {
+            var existing = points[type];
+            if (existing) {
+                existing.marker.setLngLat(lngLat);
+            } else {
+                var marker = new maplibregl.Marker({ element: createMarkerElement(type), draggable: true })
+                    .setLngLat(lngLat)
+                    .addTo(map);
+                points[type] = { marker: marker, comment: '' };
+            }
+            document.getElementById(POINT_META[type].wrapId).style.display = 'block';
+        }
+
+        function removePoint(type) {
+            var existing = points[type];
+            if (!existing) return;
+            existing.marker.remove();
+            points[type] = null;
+            document.getElementById(POINT_META[type].wrapId).style.display = 'none';
+            document.getElementById(POINT_META[type].commentId).value = '';
+        }
+
+        function stopPlacing() {
+            selectedType = null;
+            document.querySelectorAll('.tool-btn').forEach(function(b) { b.classList.remove('active'); });
+            document.getElementById('map').classList.remove('paint-cursor');
+            document.getElementById('status').innerText = 'Válassz egy pontot, vagy küldd be a meglévőket!';
+        }
+
+        // Eszközváltás — ha a már aktív gombra kattintanak újra, kikapcsoljuk
+        // az elhelyező módot anélkül, hogy pontot raknánk le.
+        function selectPointType(type) {
+            if (selectedType === type) { stopPlacing(); return; }
+
+            selectedType = type;
+            document.querySelectorAll('.tool-btn').forEach(function(b) { b.classList.remove('active'); });
+            document.getElementById(POINT_META[type].btnId).classList.add('active');
+            document.getElementById('map').classList.add('paint-cursor');
+            document.getElementById('status').innerText = 'Kattints a térképre a pont elhelyezéséhez!';
+        }
+
+        function wirePointerEvents() {
+            map.on('click', function(e) {
+                if (!selectedType) return;
+                placeOrMovePoint(selectedType, e.lngLat);
+                stopPlacing();
+            });
+        }
+
+        POINT_TYPES.forEach(function(type) {
+            document.getElementById(POINT_META[type].commentId).addEventListener('input', function(e) {
+                if (points[type]) points[type].comment = e.target.value;
+            });
+        });
+
+        fetch('config.json')
+            .then(function(r) { return r.ok ? r.json() : Promise.reject(new Error('config.json HTTP ' + r.status)); })
+            .catch(function(err) {
+                console.warn('config.json nem tölthető be, alapértelmezett beállításokkal indulunk:', err);
+                return DEFAULT_CONFIG;
+            })
+            .then(initApp);
+
+        function initApp(config) {
+            document.title = config.project.pageTitle;
+            document.getElementById('intro-text').textContent = config.project.introText;
+            document.getElementById('brand-subtitle').textContent = config.project.subtitle;
+            supabaseClient = window.supabase.createClient(config.supabase.url, config.supabase.anonKey);
+
+            // Térkép fókuszálása a projekt konfigurált középpontjára
+            // (a config [lat, lng] sorrendet tárol, a MapLibre [lng, lat]-et vár)
+            map = new maplibregl.Map({
+                container: 'map',
+                style: buildStyle(),
+                center: [config.map.center[1], config.map.center[0]],
+                zoom: config.map.zoom
+            });
+            map.addControl(new maplibregl.NavigationControl({ showCompass: false }), 'top-left');
+
+            map.on('load', function() {
+                wirePointerEvents();
+                document.getElementById('status').innerText = "Válassz egy pontot!";
+            });
+        }
+
+        // 4. BEKÜLDÉS (Supabase) — a supabaseClient az initApp()-ban jön létre config-ból.
+        // A "drawings" tábla geom oszlopa natív PostGIS geometry; a PostGIS json→geometry
+        // cast-ja miatt egy nyers GeoJSON geometria objektum közvetlenül beszúrható bele.
+        function submitPoints() {
+            var statusDiv = document.getElementById('status');
+            var rows = [];
+
+            POINT_TYPES.forEach(function(type) {
+                var p = points[type];
+                if (!p) return;
+                var lngLat = p.marker.getLngLat();
+                rows.push({
+                    user_id: USER_ID,
+                    attitude: POINT_META[type].attitude,
+                    comment: p.comment || '',
+                    geom: { type: 'Point', coordinates: [lngLat.lng, lngLat.lat] }
+                });
+            });
+
+            if (rows.length === 0) {
+                statusDiv.innerHTML = "<span style='color:#ffc107'>⚠️ Jelölj ki legalább egy pontot (forrót vagy hűvöset)!</span>";
+                return;
+            }
+
+            var btn = document.querySelector('.submit-btn');
+            btn.disabled = true; btn.innerText = "Küldés folyamatban...";
+
+            supabaseClient.from('drawings').insert(rows)
+            .then(function(result) {
+                if (result.error) throw result.error;
+                statusDiv.innerHTML = "<span style='color:#94d3a2'>✅ Sikeres beküldés! Irány a kérdőív…</span>";
+                btn.innerText = "Beküldve";
+                setTimeout(function() {
+                    window.location.href = 'survey.html?uid=' + encodeURIComponent(USER_ID);
+                }, 900);
+            })
+            .catch(function(error) {
+                console.error(error);
+                statusDiv.innerHTML = "<span style='color:#dc3545'>❌ Nem sikerült elküldeni. Próbáld újra.</span>";
+                btn.disabled = false; btn.innerText = "✅ Pontok beküldése";
+            });
+        }
+    </script>
+</body>
+</html>

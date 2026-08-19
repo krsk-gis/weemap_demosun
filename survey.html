@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="hu">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>weemap - Kérdőív</title>
+    <link rel="icon" type="image/svg+xml" href="favicon.svg">
+    <link rel="icon" type="image/png" sizes="32x32" href="favicon-32.png">
+    <link rel="icon" type="image/png" sizes="192x192" href="favicon-192.png">
+    <link rel="apple-touch-icon" href="apple-touch-icon.png">
+
+    <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        body {
+            margin: 0; padding: 0; min-height: 100vh; box-sizing: border-box;
+            display: flex; justify-content: center; align-items: center;
+            background: #121212; font-family: 'Manrope', Roboto, Helvetica, Arial, sans-serif;
+            padding: 20px;
+        }
+
+        #survey-card {
+            background: rgb(37, 37, 37); padding: 30px; border-radius: 12px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5); color: white;
+            width: 100%; max-width: 380px; box-sizing: border-box;
+        }
+        #brand-logo { display: block; height: 34px; width: auto; margin: 0 auto 14px; }
+        #survey-card h2 {
+            margin: 0 0 20px 0; font-size: 16px; font-weight: 600; color: #b6b6b6;
+            text-align: center;
+        }
+        #survey-card p.lead { font-size: 13px; color: #cccccc; margin-bottom: 20px; text-align: center; font-weight: 500; }
+
+        label { display: block; margin-top: 14px; margin-bottom: 6px; color: #cccccc; font-size: 14px; font-weight: 600; }
+        input, select {
+            width: 100%; padding: 9px; box-sizing: border-box; border: 1px solid #555;
+            border-radius: 4px; background-color: #505050; color: white;
+            font-family: 'Manrope', sans-serif; font-size: 14px; font-weight: 600;
+        }
+
+        #survey-submit-btn {
+            background: #28a745; color: white; border: none; padding: 12px; width: 100%;
+            margin-top: 20px; border-radius: 5px; cursor: pointer; font-weight: 700;
+            font-family: 'Manrope'; font-size: 16px; transition: all 0.2s;
+        }
+        #survey-submit-btn:hover { background: #166628; }
+        #survey-submit-btn:disabled { background-color: #94d3a2; cursor: not-allowed; }
+
+        #survey-status { margin-top: 12px; font-size: 14px; text-align: center; min-height: 18px; font-weight: bold; }
+
+        .back-link { display: block; margin-top: 18px; text-align: center; font-size: 13px; color: #8fa6a4; text-decoration: none; }
+        .back-link:hover { text-decoration: underline; }
+    </style>
+</head>
+<body>
+    <div id="survey-card">
+        <img src="weemap-brand.svg" alt="weemap" id="brand-logo">
+        <h2 id="survey-subtitle">Köszönjük a beküldött térképet!</h2>
+        <p class="lead">Már csak néhány gyors kérdés van hátra — ezzel segíted a kutatást.</p>
+
+        <form id="survey-form">
+            <label>Hány éves vagy?</label>
+            <input type="number" id="inp-age" placeholder="Pl. 25" min="1" max="120" required>
+
+            <label>Nemed?</label>
+            <select id="inp-gender" required>
+                <option value="">- Válassz -</option>
+                <option value="ferfi">Férfi</option>
+                <option value="no">Nő</option>
+                <option value="egyeb">Egyéb</option>
+            </select>
+
+            <label>Állandó lakhely (Település):</label>
+            <input type="text" id="inp-city" placeholder="Pl. Szeged" required>
+
+            <button type="submit" id="survey-submit-btn">Adatok beküldése</button>
+        </form>
+        <div id="survey-status"></div>
+
+        <a class="back-link" href="pollmap.html">← Új térkép beküldése</a>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script>
+        function generateUUID() {
+            return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+                var r = Math.random() * 16 | 0, v = c == 'x' ? r : (r & 0x3 | 0x8);
+                return v.toString(16);
+            });
+        }
+
+        // A pollmap.html a saját USER_ID-jét adja tovább ?uid=... paraméterben,
+        // hogy a rajz és a kérdőív ugyanahhoz a beküldőhöz kapcsolódjon a
+        // Supabase-ben. Ha valaki közvetlenül ide navigál (nincs uid), attól
+        // még önállóan is kitölthető a kérdőív egy friss azonosítóval.
+        var USER_ID = new URLSearchParams(window.location.search).get('uid') || generateUUID();
+        console.log("Session ID:", USER_ID);
+
+        var DEFAULT_CONFIG = {
+            project: {
+                title: 'weemap',
+                cityPlaceholder: 'Szeged'
+            },
+            supabase: { url: 'https://ujcjjxiynmvznategkqa.supabase.co', anonKey: 'sb_publishable_jypOo0iOpr29521pm5Uezg_slw-70dD' }
+        };
+
+        var supabaseClient;
+
+        fetch('config.json')
+            .then(function(r) { return r.ok ? r.json() : Promise.reject(new Error('config.json HTTP ' + r.status)); })
+            .catch(function(err) {
+                console.warn('config.json nem tölthető be, alapértelmezett beállításokkal indulunk:', err);
+                return DEFAULT_CONFIG;
+            })
+            .then(initApp);
+
+        function initApp(config) {
+            document.title = config.project.title + ' - Kérdőív';
+            document.getElementById('inp-city').placeholder = 'Pl. ' + config.project.cityPlaceholder;
+            supabaseClient = window.supabase.createClient(config.supabase.url, config.supabase.anonKey);
+        }
+
+        document.getElementById('survey-form').addEventListener('submit', function(e) {
+            e.preventDefault();
+
+            var age = document.getElementById('inp-age').value;
+            var gender = document.getElementById('inp-gender').value;
+            var city = document.getElementById('inp-city').value;
+            var btn = document.getElementById('survey-submit-btn');
+            var statusDiv = document.getElementById('survey-status');
+
+            if (!age || !gender || !city) {
+                statusDiv.innerHTML = "<span style='color:#ffc107'>⚠️ Kérlek töltsd ki mind a három mezőt!</span>";
+                return;
+            }
+
+            btn.disabled = true; btn.innerText = "Küldés...";
+            statusDiv.innerHTML = '';
+
+            supabaseClient.from('surveys').insert([{
+                user_id: USER_ID,
+                age: parseInt(age, 10),
+                gender: gender,
+                city: city
+            }])
+            .then(function(result) {
+                if (result.error) throw result.error;
+                document.getElementById('survey-form').style.display = 'none';
+                document.getElementById('survey-subtitle').textContent = 'Köszönjük! ✅';
+                statusDiv.innerHTML = "<span style='color:#94d3a2'>A válaszaidat rögzítettük.</span>";
+            })
+            .catch(function(error) {
+                console.error(error);
+                statusDiv.innerHTML = "<span style='color:#dc3545'>❌ Nem sikerült elküldeni. Próbáld újra.</span>";
+                btn.disabled = false; btn.innerText = "Adatok beküldése";
+            });
+        });
+    </script>
+</body>
+</html>
