@@ -111,34 +111,12 @@
         .maplibregl-ctrl-group button:hover { background-color: #1a1a1a !important; }
         .maplibregl-ctrl-icon { filter: invert(1); }
 
-        /* --- BAL ALSÓ LOGÓ --- */
-        #bottom-logo {
-            position: absolute;
-            bottom: 20px;
-            left: 20px;
-            z-index: 1000;
-            pointer-events: none;
-        }
-
-        #bottom-logo img {
-            height: 100px;
-            width: auto;
-            transition: opacity 0.3s;
-            pointer-events: auto;
-        }
-
-        #bottom-logo img:hover {
-            opacity: 1;
-        }
-
         /* --- MOBIL ELRENDEZÉS --- */
         @media (max-width: 680px) {
             .modal-content { padding: 24px 18px; max-width: 92vw; }
             .modal-content h1 { font-size: 26px; }
             .intro-logo { height: 38px; }
             .start-btn { width: 85%; }
-
-            #bottom-logo { display: none; }
 
             #brand-box { top: 8px; right: 8px; padding: 8px 12px 6px; }
             #brand-logo-img { height: 32px; }
@@ -166,9 +144,6 @@
     </style>
 </head>
 <body>
-    <div id="bottom-logo">
-        <img src="geons.png">
-    </div>
     <div id="intro-modal">
         <div class="modal-content">
             <h1>
