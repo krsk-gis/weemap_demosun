@@ -87,11 +87,17 @@
         /* --- JOBB FELSŐ LOGÓ DOBOZ --- */
         #brand-box {
             position: absolute; top: 10px; right: 10px; z-index: 1000;
-            background: rgb(37, 37, 37); padding: 14px 20px 10px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.15);
-            display: flex; flex-direction: column; align-items: flex-end;
+            background: rgb(37, 37, 37); padding: 12px 20px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.15);
+            display: flex; align-items: center;
         }
         #brand-logo-img { height: 50px; width: auto; display: block; }
-        #brand-subtitle { margin-top: 4px; font-size: 15px; color: #b6b6b6; letter-spacing: 0.5px; font-family: 'Manrope', sans-serif; font-weight: 600; }
+
+        /* --- ALSÓ, VISSZAFOGOTT "POWERED BY" FELIRAT --- */
+        #page-footer {
+            position: fixed; left: 50%; bottom: 10px; transform: translateX(-50%); z-index: 900;
+            font-size: 12px; font-weight: 500; color: #6b6b6b; letter-spacing: 0.3px;
+            pointer-events: none; white-space: nowrap;
+        }
 
         /* --- KURZOROK ÉS EGYÉB --- */
         .paint-cursor { cursor: crosshair !important; }
@@ -118,9 +124,9 @@
             .intro-logo { height: 38px; }
             .start-btn { width: 85%; }
 
-            #brand-box { top: 8px; right: 8px; padding: 8px 12px 6px; }
+            #brand-box { top: 8px; right: 8px; padding: 8px 12px; }
             #brand-logo-img { height: 32px; }
-            #brand-subtitle { display: none; }
+            #page-footer { display: none; }
 
             #custom-panel {
                 top: auto; bottom: 0; left: 0; right: 0; width: 100%;
@@ -168,8 +174,9 @@
 
     <div id="brand-box">
         <img src="weemap-brand.svg" alt="weemap" id="brand-logo-img">
-        <span id="brand-subtitle">by Mapversum</span>
     </div>
+
+    <div id="page-footer">powered by <span id="footer-partner">Mapversum</span></div>
 
     <div id="custom-panel">
         <h3>🌡️ Hőérzet térképezése</h3>
@@ -226,7 +233,7 @@
         var DEFAULT_CONFIG = {
             project: {
                 title: 'weemap demosun',
-                subtitle: 'by Mapversum',
+                subtitle: 'Mapversum',
                 pageTitle: 'weemap demosun - Hőtérkép',
                 introText: 'Ez egy közösségi térképező alkalmazás, amely azt méri fel, hogy Szegeden hol vannak a legforróbb és a leghűvösebb pontok — segíts megtalálni őket!',
                 cityPlaceholder: 'Szeged'
@@ -352,7 +359,7 @@
         function initApp(config) {
             document.title = config.project.pageTitle;
             document.getElementById('intro-text').textContent = config.project.introText;
-            document.getElementById('brand-subtitle').textContent = config.project.subtitle;
+            document.getElementById('footer-partner').textContent = config.project.subtitle;
             supabaseClient = window.supabase.createClient(config.supabase.url, config.supabase.anonKey);
 
             // Térkép fókuszálása a projekt konfigurált középpontjára
