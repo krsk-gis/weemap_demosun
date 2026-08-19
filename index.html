@@ -125,10 +125,10 @@
             #brand-logo-img { height: 32px; }
 
             #custom-panel {
-                top: auto; bottom: 0; left: 0; right: 0; width: 100%;
-                max-height: 60vh; overflow-y: auto;
-                border-radius: 14px 14px 0 0;
-                padding: 10px 12px calc(10px + env(safe-area-inset-bottom));
+                top: auto; bottom: calc(12px + env(safe-area-inset-bottom)); left: 12px; right: 12px; width: auto;
+                max-height: 55vh; max-height: 55dvh; overflow-y: auto;
+                border-radius: 16px;
+                padding: 10px 12px;
                 box-sizing: border-box;
             }
             #custom-panel h3 { display: none; }
@@ -365,12 +365,13 @@
                 attributionControl: false
             });
             map.addControl(new maplibregl.NavigationControl({ showCompass: false }), 'top-left');
-            // A "powered by" kredit a térkép saját (i) attribution gombjába kerül —
-            // mobilon ez helyet takarít meg és nem hagy üres sávot a lap alján.
+            // A "powered by" kredit a térkép saját (i) attribution gombjába kerül.
+            // top-left, a zoom gombok alá — bottom-right (az alapértelmezés) mobilon
+            // a teljes szélességű alsó panel alá esne és sosem látszódna.
             map.addControl(new maplibregl.AttributionControl({
                 compact: true,
                 customAttribution: 'powered by ' + config.project.subtitle
-            }));
+            }), 'top-left');
 
             map.on('load', function() {
                 wirePointerEvents();
