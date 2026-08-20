@@ -55,6 +55,8 @@
         .tool-btn:hover { background: #1a1a1a; }
         .tool-btn.active { background: #8ebdff; border-color: #007bff; color: #007bff; font-weight: bold; }
         .tool-btn i { margin-right: 10px; width: 20px; text-align: center; }
+        .tool-btn .count-badge { margin-left: auto; font-size: 12px; opacity: 0.8; font-weight: 600; }
+        .tool-btn.maxed { opacity: 0.55; cursor: not-allowed; }
 
         .tool-hint { font-size: 12.5px; color: #aaaaaa; line-height: 1.4; margin: 6px 2px 12px; font-weight: 500; }
 
@@ -104,6 +106,7 @@
             box-shadow: 0 2px 8px rgba(0,0,0,0.45); cursor: grab;
         }
         .point-marker:active { cursor: grabbing; }
+        .point-marker.active-marker { outline: 3px solid #ffffff; outline-offset: 2px; }
 
         /* MapLibre kontrollok sötét témához igazítva */
         .maplibregl-ctrl-group { background: #424242 !important; border: 1px solid #e0e0e0; }
@@ -157,11 +160,11 @@
             <p style="font-size: 16px; color: #aaa;">
                 1. Válaszd ki az eszköztárban, hogy forró vagy hűvös pontot szeretnél jelölni.<br>
                 2. Kattints a térképen arra a helyre, amit a legforróbbnak / leghűvösebbnek érzel.<br>
-                3. Ha szeretnéd, írj pár szót arról, miért pont ott jelölted a pontot.<br>
+                3. Az újonnan lerakott pont lesz a kijelölt — írj pár szót arról, miért pont ott jelölted.<br>
                 4. Ha végeztél, küldd be a pontjaidat.<br>
                 5. Beküldés után egy rövid kérdőív nyílik meg — azt is töltsd ki!<br>
             </p>
-            <p style="font-size: 13px; color: #888;">Egy forró és egy hűvös pontot jelölhetsz ki. Újbóli kattintással áthelyezheted, vagy egyszerűen húzd a jelölőt.</p>
+            <p style="font-size: 13px; color: #888;">Típusonként legfeljebb 3-3 pontot jelölhetsz ki. Egy meglévő pontra kattintva kijelölheted és szerkesztheted az indoklását, vagy húzással áthelyezheted.</p>
             <button class="start-btn" onclick="closeModal()">Vágjunk bele!</button>
         </div>
     </div>
@@ -176,25 +179,19 @@
 
         <div class="tool-row">
             <button class="tool-btn" id="btn-hot" onclick="selectPointType('hot')">
-                <i class="fas fa-sun" style="color:#ff7a1a"></i> Forró pont
+                <i class="fas fa-sun" style="color:#ff7a1a"></i> Forró pont <span class="count-badge" id="hot-count">(0/3)</span>
             </button>
             <button class="tool-btn" id="btn-cool" onclick="selectPointType('cool')">
-                <i class="fas fa-snowflake" style="color:#29b6f6"></i> Hűvös pont
+                <i class="fas fa-snowflake" style="color:#29b6f6"></i> Hűvös pont <span class="count-badge" id="cool-count">(0/3)</span>
             </button>
         </div>
 
-        <p class="tool-hint">Válaszd ki az egyik gombot, majd kattints a térképen a helyére. A jelölő utólag húzással is finomítható.</p>
+        <p class="tool-hint">Válaszd ki az egyik gombot, majd kattints a térképen a helyére — típusonként max. 3 pont. Egy meglévő pontra kattintva kijelölheted, hogy az indoklását szerkeszd.</p>
 
-        <div class="point-card" id="hot-comment-wrap" style="display:none">
-            <label><i class="fas fa-sun" style="color:#ff7a1a"></i> Forró pont — miért itt?</label>
-            <textarea id="hot-comment" class="brush-comment" placeholder="Pl. sok az aszfalt, nincs árnyék… (opcionális)"></textarea>
-            <button type="button" class="remove-point-btn" onclick="removePoint('hot')">✕ Pont törlése</button>
-        </div>
-
-        <div class="point-card" id="cool-comment-wrap" style="display:none">
-            <label><i class="fas fa-snowflake" style="color:#29b6f6"></i> Hűvös pont — miért itt?</label>
-            <textarea id="cool-comment" class="brush-comment" placeholder="Pl. sok a fa, árnyékos… (opcionális)"></textarea>
-            <button type="button" class="remove-point-btn" onclick="removePoint('cool')">✕ Pont törlése</button>
+        <div class="point-card" id="active-point-card" style="display:none">
+            <label id="active-point-label">Pont — miért itt?</label>
+            <textarea id="active-comment" class="brush-comment" placeholder="Pl. sok az aszfalt, nincs árnyék… (opcionális)"></textarea>
+            <button type="button" class="remove-point-btn" onclick="removeActivePoint()">✕ Ez a pont törlése</button>
         </div>
 
         <button class="submit-btn" onclick="submitPoints()">✅ Pontok beküldése</button>
@@ -260,22 +257,26 @@
             };
         }
 
-        // --- Két jelölhető pont: egy "forró" és egy "hűvös". Mindegyik egy
-        // húzható MapLibre Marker, saját opcionális szöveges indoklással.
-        // A korábbi beküldők eredményei szándékosan nincsenek betöltve/kirajzolva.
+        // --- Típusonként legfeljebb MAX_POINTS_PER_TYPE ("forró" / "hűvös")
+        // jelölhető pont, mindegyik egy húzható MapLibre Marker, saját
+        // opcionális szöveges indoklással. Egyszerre mindig egy pont van
+        // "kijelölve" (activeRef) — az ő indoklását szerkeszti a jobb oldali
+        // szövegmező. Új pont lerakásakor mindig az az újonnan létrehozott
+        // pont lesz a kijelölt, egy meglévő pontra kattintva pedig arra vált
+        // a kijelölés. A korábbi beküldők eredményei szándékosan nincsenek
+        // betöltve/kirajzolva.
+        var MAX_POINTS_PER_TYPE = 3;
         var POINT_TYPES = ['hot', 'cool'];
         var POINT_META = {
-            hot:  { attitude: 'Forró pont', color: '#ff7a1a', icon: 'fa-sun',       commentId: 'hot-comment',  wrapId: 'hot-comment-wrap',  btnId: 'btn-hot' },
-            cool: { attitude: 'Hűvös pont', color: '#29b6f6', icon: 'fa-snowflake', commentId: 'cool-comment', wrapId: 'cool-comment-wrap', btnId: 'btn-cool' }
+            hot:  { attitude: 'Forró pont', label: 'Forró pont', color: '#ff7a1a', icon: 'fa-sun',       btnId: 'btn-hot',  countId: 'hot-count' },
+            cool: { attitude: 'Hűvös pont', label: 'Hűvös pont', color: '#29b6f6', icon: 'fa-snowflake', btnId: 'btn-cool', countId: 'cool-count' }
         };
 
         var map, supabaseClient;
-        var points = { hot: null, cool: null }; // type -> { marker, comment } | null
+        var points = { hot: [], cool: [] }; // type -> [{ id, marker, comment }]
+        var nextPointId = 1;
         var selectedType = null; // épp elhelyezésre váró pont típusa ('hot' | 'cool' | null)
-
-        function emptyFC() {
-            return { type: 'FeatureCollection', features: [] };
-        }
+        var activeRef = null; // { type, id } — melyik pont indoklását szerkesztjük épp
 
         function createMarkerElement(type) {
             var meta = POINT_META[type];
@@ -286,26 +287,74 @@
             return el;
         }
 
-        function placeOrMovePoint(type, lngLat) {
-            var existing = points[type];
-            if (existing) {
-                existing.marker.setLngLat(lngLat);
-            } else {
-                var marker = new maplibregl.Marker({ element: createMarkerElement(type), draggable: true })
-                    .setLngLat(lngLat)
-                    .addTo(map);
-                points[type] = { marker: marker, comment: '' };
+        function findPoint(type, id) {
+            var list = points[type];
+            for (var i = 0; i < list.length; i++) {
+                if (list[i].id === id) return list[i];
             }
-            document.getElementById(POINT_META[type].wrapId).style.display = 'block';
+            return null;
         }
 
-        function removePoint(type) {
-            var existing = points[type];
-            if (!existing) return;
-            existing.marker.remove();
-            points[type] = null;
-            document.getElementById(POINT_META[type].wrapId).style.display = 'none';
-            document.getElementById(POINT_META[type].commentId).value = '';
+        function updateCountBadges() {
+            POINT_TYPES.forEach(function(type) {
+                var count = points[type].length;
+                document.getElementById(POINT_META[type].countId).innerText = '(' + count + '/' + MAX_POINTS_PER_TYPE + ')';
+                document.getElementById(POINT_META[type].btnId).classList.toggle('maxed', count >= MAX_POINTS_PER_TYPE);
+            });
+        }
+
+        function refreshMarkerHighlight() {
+            POINT_TYPES.forEach(function(type) {
+                points[type].forEach(function(p) {
+                    var isActive = !!(activeRef && activeRef.type === type && activeRef.id === p.id);
+                    p.marker.getElement().classList.toggle('active-marker', isActive);
+                });
+            });
+        }
+
+        function setActivePoint(type, id) {
+            var p = findPoint(type, id);
+            if (!p) { activeRef = null; document.getElementById('active-point-card').style.display = 'none'; refreshMarkerHighlight(); return; }
+            activeRef = { type: type, id: id };
+            var meta = POINT_META[type];
+            document.getElementById('active-point-card').style.display = 'block';
+            document.getElementById('active-point-label').innerHTML = '<i class="fas ' + meta.icon + '" style="color:' + meta.color + '"></i> ' + meta.label + ' — miért itt?';
+            document.getElementById('active-comment').value = p.comment || '';
+            refreshMarkerHighlight();
+        }
+
+        function placePoint(type, lngLat) {
+            if (points[type].length >= MAX_POINTS_PER_TYPE) {
+                document.getElementById('status').innerText = 'Ebből a típusból már ' + MAX_POINTS_PER_TYPE + ' pontot kijelöltél — előbb törölj egyet, ha máshova tennéd.';
+                return;
+            }
+            var id = nextPointId++;
+            var marker = new maplibregl.Marker({ element: createMarkerElement(type), draggable: true })
+                .setLngLat(lngLat)
+                .addTo(map);
+            marker.getElement().addEventListener('click', function(ev) {
+                ev.stopPropagation();
+                stopPlacing();
+                setActivePoint(type, id);
+            });
+            marker.on('dragstart', function() { setActivePoint(type, id); });
+            points[type].push({ id: id, marker: marker, comment: '' });
+            updateCountBadges();
+            setActivePoint(type, id);
+            document.getElementById('status').innerText = 'Pont elhelyezve! Írd meg, miért oda tetted (opcionális).';
+        }
+
+        function removeActivePoint() {
+            if (!activeRef) return;
+            var list = points[activeRef.type];
+            var idx = -1;
+            for (var i = 0; i < list.length; i++) { if (list[i].id === activeRef.id) { idx = i; break; } }
+            if (idx === -1) return;
+            list[idx].marker.remove();
+            list.splice(idx, 1);
+            activeRef = null;
+            document.getElementById('active-point-card').style.display = 'none';
+            updateCountBadges();
         }
 
         function stopPlacing() {
@@ -319,6 +368,10 @@
         // az elhelyező módot anélkül, hogy pontot raknánk le.
         function selectPointType(type) {
             if (selectedType === type) { stopPlacing(); return; }
+            if (points[type].length >= MAX_POINTS_PER_TYPE) {
+                document.getElementById('status').innerText = 'Ebből a típusból már ' + MAX_POINTS_PER_TYPE + ' pontot kijelöltél.';
+                return;
+            }
 
             selectedType = type;
             document.querySelectorAll('.tool-btn').forEach(function(b) { b.classList.remove('active'); });
@@ -330,15 +383,16 @@
         function wirePointerEvents() {
             map.on('click', function(e) {
                 if (!selectedType) return;
-                placeOrMovePoint(selectedType, e.lngLat);
+                var type = selectedType;
                 stopPlacing();
+                placePoint(type, e.lngLat);
             });
         }
 
-        POINT_TYPES.forEach(function(type) {
-            document.getElementById(POINT_META[type].commentId).addEventListener('input', function(e) {
-                if (points[type]) points[type].comment = e.target.value;
-            });
+        document.getElementById('active-comment').addEventListener('input', function(e) {
+            if (!activeRef) return;
+            var p = findPoint(activeRef.type, activeRef.id);
+            if (p) p.comment = e.target.value;
         });
 
         fetch('config.json')
@@ -367,6 +421,7 @@
 
             map.on('load', function() {
                 wirePointerEvents();
+                updateCountBadges();
                 document.getElementById('status').innerText = "Válassz egy pontot!";
             });
         }
@@ -379,14 +434,14 @@
             var rows = [];
 
             POINT_TYPES.forEach(function(type) {
-                var p = points[type];
-                if (!p) return;
-                var lngLat = p.marker.getLngLat();
-                rows.push({
-                    user_id: USER_ID,
-                    attitude: POINT_META[type].attitude,
-                    comment: p.comment || '',
-                    geom: { type: 'Point', coordinates: [lngLat.lng, lngLat.lat] }
+                points[type].forEach(function(p) {
+                    var lngLat = p.marker.getLngLat();
+                    rows.push({
+                        user_id: USER_ID,
+                        attitude: POINT_META[type].attitude,
+                        comment: p.comment || '',
+                        geom: { type: 'Point', coordinates: [lngLat.lng, lngLat.lat] }
+                    });
                 });
             });
 
