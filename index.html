@@ -278,6 +278,35 @@
             return { type: 'FeatureCollection', features: [] };
         }
 
+        // Beküldés előtti piszkozat mentése sessionStorage-be (csak az adott fülre/
+        // munkamenetre vonatkozik), hogy egy véletlen "vissza" gomb ne törölje a
+        // félkész munkát — az oldal újratöltésekor visszaáll a legutóbbi állapot.
+        var DRAFT_KEY = 'weemap_demosun_draft_v1';
+
+        function saveDraft() {
+            try {
+                var data = {};
+                POINT_TYPES.forEach(function(type) {
+                    var p = points[type];
+                    if (!p) { data[type] = null; return; }
+                    var lngLat = p.marker.getLngLat();
+                    data[type] = { lng: lngLat.lng, lat: lngLat.lat, comment: p.comment || '' };
+                });
+                sessionStorage.setItem(DRAFT_KEY, JSON.stringify(data));
+            } catch (e) { /* privát böngészés stb. — a piszkozat-mentés nem kritikus */ }
+        }
+
+        function loadDraft() {
+            try {
+                var raw = sessionStorage.getItem(DRAFT_KEY);
+                return raw ? JSON.parse(raw) : null;
+            } catch (e) { return null; }
+        }
+
+        function clearDraft() {
+            try { sessionStorage.removeItem(DRAFT_KEY); } catch (e) {}
+        }
+
         function createMarkerElement(type) {
             var meta = POINT_META[type];
             var el = document.createElement('div');
@@ -295,9 +324,11 @@
                 var marker = new maplibregl.Marker({ element: createMarkerElement(type), draggable: true })
                     .setLngLat(lngLat)
                     .addTo(map);
+                marker.on('dragend', saveDraft);
                 points[type] = { marker: marker, comment: '' };
             }
             document.getElementById(POINT_META[type].wrapId).style.display = 'block';
+            saveDraft();
         }
 
         function removePoint(type) {
@@ -307,6 +338,7 @@
             points[type] = null;
             document.getElementById(POINT_META[type].wrapId).style.display = 'none';
             document.getElementById(POINT_META[type].commentId).value = '';
+            saveDraft();
         }
 
         function stopPlacing() {
@@ -339,6 +371,7 @@
         POINT_TYPES.forEach(function(type) {
             document.getElementById(POINT_META[type].commentId).addEventListener('input', function(e) {
                 if (points[type]) points[type].comment = e.target.value;
+                saveDraft();
             });
         });
 
@@ -375,7 +408,24 @@
 
             map.on('load', function() {
                 wirePointerEvents();
-                document.getElementById('status').innerText = "Válassz egy pontot!";
+
+                var draft = loadDraft();
+                var restored = false;
+                if (draft) {
+                    POINT_TYPES.forEach(function(type) {
+                        var d = draft[type];
+                        if (!d) return;
+                        placeOrMovePoint(type, { lng: d.lng, lat: d.lat });
+                        points[type].comment = d.comment || '';
+                        var commentBox = document.getElementById(POINT_META[type].commentId);
+                        commentBox.value = d.comment || '';
+                        restored = true;
+                    });
+                }
+
+                document.getElementById('status').innerText = restored
+                    ? "Folytatod a korábban megkezdett jelölést."
+                    : "Válassz egy pontot!";
             });
         }
 
@@ -409,6 +459,7 @@
             supabaseClient.from('drawings').insert(rows)
             .then(function(result) {
                 if (result.error) throw result.error;
+                clearDraft();
                 statusDiv.innerHTML = "<span style='color:#94d3a2'>✅ Sikeres beküldés! Irány a kérdőív…</span>";
                 btn.innerText = "Beküldve";
                 setTimeout(function() {
