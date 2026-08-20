@@ -13,8 +13,12 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;600;700;800&display=swap" rel="stylesheet">
     <style>
+        html, body { height: 100%; overflow: hidden; }
         body { margin: 0; padding: 0; font-family: 'Manrope', Roboto, Helvetica, Arial, sans-serif; }
-        #map { height: 100vh; width: 100%; cursor: default; }
+        /* dvh a mobil böngészők (pl. Safari) csúszó cím/eszköztára miatt — enélkül
+           100vh a maximális (eszköztár nélküli) magassággal számol, ami az
+           eszköztár megjelenésekor üres sávot hagy a lap alján. */
+        #map { height: 100vh; height: 100dvh; width: 100%; cursor: default; }
 
         /* --- BEVEZETŐ ABLAK --- */
         #intro-modal {
@@ -89,11 +93,20 @@
         /* --- JOBB FELSŐ LOGÓ DOBOZ --- */
         #brand-box {
             position: absolute; top: 10px; right: 10px; z-index: 1000;
-            background: rgb(37, 37, 37); padding: 14px 20px 10px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.15);
-            display: flex; flex-direction: column; align-items: flex-end;
+            background: rgb(37, 37, 37); padding: 12px 20px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.15);
+            display: flex; align-items: center;
         }
         #brand-logo-img { height: 50px; width: auto; display: block; }
-        #brand-subtitle { margin-top: 4px; font-size: 15px; color: #b6b6b6; letter-spacing: 0.5px; font-family: 'Manrope', sans-serif; font-weight: 600; }
+
+        /* --- ALSÓ, VISSZAFOGOTT "POWERED BY" FELIRAT --- */
+        #page-footer {
+            position: fixed; left: 50%; bottom: calc(10px + env(safe-area-inset-bottom)); transform: translateX(-50%); z-index: 900;
+            font-size: 12px; font-weight: 700; color: #1a1a1a; letter-spacing: 0.3px;
+            pointer-events: none; white-space: nowrap;
+            text-shadow:
+                -1px -1px 0 #fff, 1px -1px 0 #fff, -1px 1px 0 #fff, 1px 1px 0 #fff,
+                0 0 1px #fff, 0 0 4px #fff, 0 0 4px #fff, 0 0 8px #fff, 0 0 8px #fff;
+        }
 
         /* --- KURZOROK ÉS EGYÉB --- */
         .paint-cursor { cursor: crosshair !important; }
@@ -121,17 +134,19 @@
             .intro-logo { height: 38px; }
             .start-btn { width: 85%; }
 
-            #brand-box { top: 8px; right: 8px; padding: 8px 12px 6px; }
+            #brand-box { top: 8px; right: 8px; padding: 8px 12px; }
             #brand-logo-img { height: 32px; }
-            #brand-subtitle { display: none; }
 
+            /* A panelt kicsit feljebb toljuk, hogy alatta maradjon hely a
+               "powered by" feliratnak — az is látszódjon mobilon. */
             #custom-panel {
-                top: auto; bottom: 0; left: 0; right: 0; width: 100%;
-                max-height: 60vh; overflow-y: auto;
-                border-radius: 14px 14px 0 0;
-                padding: 10px 12px calc(10px + env(safe-area-inset-bottom));
+                top: auto; bottom: calc(30px + env(safe-area-inset-bottom)); left: 12px; right: 12px; width: auto;
+                max-height: 55vh; max-height: 55dvh; overflow-y: auto;
+                border-radius: 16px;
+                padding: 10px 12px;
                 box-sizing: border-box;
             }
+            #page-footer { font-size: 11px; bottom: calc(8px + env(safe-area-inset-bottom)); }
             #custom-panel h3 { display: none; }
             .tool-row {
                 flex-direction: row; overflow-x: auto; -webkit-overflow-scrolling: touch;
@@ -171,8 +186,9 @@
 
     <div id="brand-box">
         <img src="weemap-brand.svg" alt="weemap" id="brand-logo-img">
-        <span id="brand-subtitle">by Mapversum</span>
     </div>
+
+    <div id="page-footer">powered by <span id="footer-partner">Mapversum</span></div>
 
     <div id="custom-panel">
         <h3>🌡️ Hőérzet térképezése</h3>
@@ -223,7 +239,7 @@
         var DEFAULT_CONFIG = {
             project: {
                 title: 'weemap demosun',
-                subtitle: 'by Mapversum',
+                subtitle: 'Mapversum',
                 pageTitle: 'weemap demosun - Hőtérkép',
                 introText: 'Ez egy közösségi térképező alkalmazás, amely azt méri fel, hogy Szegeden hol vannak a legforróbb és a leghűvösebb pontok — segíts megtalálni őket!',
                 cityPlaceholder: 'Szeged'
@@ -278,6 +294,36 @@
         var selectedType = null; // épp elhelyezésre váró pont típusa ('hot' | 'cool' | null)
         var activeRef = null; // { type, id } — melyik pont indoklását szerkesztjük épp
 
+        // Beküldés előtti piszkozat mentése sessionStorage-be (csak az adott fülre/
+        // munkamenetre vonatkozik), hogy egy véletlen "vissza" gomb ne törölje a
+        // félkész munkát — az oldal újratöltésekor visszaáll a legutóbbi állapot.
+        // v2: típusonként pontlistát tárol (max 3 db), nem egyetlen pontot.
+        var DRAFT_KEY = 'weemap_demosun_draft_v2';
+
+        function saveDraft() {
+            try {
+                var data = { hot: [], cool: [] };
+                POINT_TYPES.forEach(function(type) {
+                    points[type].forEach(function(p) {
+                        var lngLat = p.marker.getLngLat();
+                        data[type].push({ lng: lngLat.lng, lat: lngLat.lat, comment: p.comment || '' });
+                    });
+                });
+                sessionStorage.setItem(DRAFT_KEY, JSON.stringify(data));
+            } catch (e) { /* privát böngészés stb. — a piszkozat-mentés nem kritikus */ }
+        }
+
+        function loadDraft() {
+            try {
+                var raw = sessionStorage.getItem(DRAFT_KEY);
+                return raw ? JSON.parse(raw) : null;
+            } catch (e) { return null; }
+        }
+
+        function clearDraft() {
+            try { sessionStorage.removeItem(DRAFT_KEY); } catch (e) {}
+        }
+
         function createMarkerElement(type) {
             var meta = POINT_META[type];
             var el = document.createElement('div');
@@ -323,11 +369,11 @@
             refreshMarkerHighlight();
         }
 
-        function placePoint(type, lngLat) {
-            if (points[type].length >= MAX_POINTS_PER_TYPE) {
-                document.getElementById('status').innerText = 'Ebből a típusból már ' + MAX_POINTS_PER_TYPE + ' pontot kijelöltél — előbb törölj egyet, ha máshova tennéd.';
-                return;
-            }
+        // Létrehozza magát a jelölőt (drag/klikk bekötve) és felveszi a points[]
+        // tömbbe — sem a limit-ellenőrzést, sem a kijelölés-váltást nem végzi el,
+        // hogy a piszkozat-visszaállítás (loadDraft) is ugyanezt hívhassa anélkül,
+        // hogy a normál elhelyezés "Pont elhelyezve!" üzenete felvillanjon rajta.
+        function createPointMarker(type, lngLat, comment) {
             var id = nextPointId++;
             var marker = new maplibregl.Marker({ element: createMarkerElement(type), draggable: true })
                 .setLngLat(lngLat)
@@ -338,9 +384,20 @@
                 setActivePoint(type, id);
             });
             marker.on('dragstart', function() { setActivePoint(type, id); });
-            points[type].push({ id: id, marker: marker, comment: '' });
+            marker.on('dragend', saveDraft);
+            points[type].push({ id: id, marker: marker, comment: comment || '' });
             updateCountBadges();
+            return id;
+        }
+
+        function placePoint(type, lngLat) {
+            if (points[type].length >= MAX_POINTS_PER_TYPE) {
+                document.getElementById('status').innerText = 'Ebből a típusból már ' + MAX_POINTS_PER_TYPE + ' pontot kijelöltél — előbb törölj egyet, ha máshova tennéd.';
+                return;
+            }
+            var id = createPointMarker(type, lngLat, '');
             setActivePoint(type, id);
+            saveDraft();
             document.getElementById('status').innerText = 'Pont elhelyezve! Írd meg, miért oda tetted (opcionális).';
         }
 
@@ -355,6 +412,7 @@
             activeRef = null;
             document.getElementById('active-point-card').style.display = 'none';
             updateCountBadges();
+            saveDraft();
         }
 
         function stopPlacing() {
@@ -393,6 +451,7 @@
             if (!activeRef) return;
             var p = findPoint(activeRef.type, activeRef.id);
             if (p) p.comment = e.target.value;
+            saveDraft();
         });
 
         fetch('config.json')
@@ -406,7 +465,7 @@
         function initApp(config) {
             document.title = config.project.pageTitle;
             document.getElementById('intro-text').textContent = config.project.introText;
-            document.getElementById('brand-subtitle').textContent = config.project.subtitle;
+            document.getElementById('footer-partner').textContent = config.project.subtitle;
             supabaseClient = window.supabase.createClient(config.supabase.url, config.supabase.anonKey);
 
             // Térkép fókuszálása a projekt konfigurált középpontjára
@@ -415,14 +474,35 @@
                 container: 'map',
                 style: buildStyle(),
                 center: [config.map.center[1], config.map.center[0]],
-                zoom: config.map.zoom
+                zoom: config.map.zoom,
+                attributionControl: false
             });
             map.addControl(new maplibregl.NavigationControl({ showCompass: false }), 'top-left');
+            // Csak a térkép saját (OSM/PMTiles) jogi hivatkozása — a "powered by
+            // Mapversum" külön, saját feliratként jelenik meg lent középen.
+            map.addControl(new maplibregl.AttributionControl({ compact: true }), 'top-left');
 
             map.on('load', function() {
                 wirePointerEvents();
                 updateCountBadges();
-                document.getElementById('status').innerText = "Válassz egy pontot!";
+
+                var draft = loadDraft();
+                var restored = false;
+                var lastRestoredRef = null;
+                if (draft) {
+                    POINT_TYPES.forEach(function(type) {
+                        (draft[type] || []).forEach(function(d) {
+                            var id = createPointMarker(type, { lng: d.lng, lat: d.lat }, d.comment || '');
+                            lastRestoredRef = { type: type, id: id };
+                            restored = true;
+                        });
+                    });
+                    if (lastRestoredRef) setActivePoint(lastRestoredRef.type, lastRestoredRef.id);
+                }
+
+                document.getElementById('status').innerText = restored
+                    ? "Folytatod a korábban megkezdett jelölést."
+                    : "Válassz egy pontot!";
             });
         }
 
@@ -456,6 +536,7 @@
             supabaseClient.from('drawings').insert(rows)
             .then(function(result) {
                 if (result.error) throw result.error;
+                clearDraft();
                 statusDiv.innerHTML = "<span style='color:#94d3a2'>✅ Sikeres beküldés! Irány a kérdőív…</span>";
                 btn.innerText = "Beküldve";
                 setTimeout(function() {

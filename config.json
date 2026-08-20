@@ -1,7 +1,7 @@
 {
   "project": {
     "title": "weemap demosun",
-    "subtitle": "by Mapversum",
+    "subtitle": "Mapversum",
     "pageTitle": "weemap demosun - Hőtérkép",
     "introText": "Ez egy közösségi térképező alkalmazás, amely azt méri fel, hogy Szegeden hol vannak a legforróbb és a leghűvösebb pontok — segíts megtalálni őket!",
     "cityPlaceholder": "Szeged"
